@@ -1,0 +1,153 @@
+```yaml
+# Migration Journal Integrity Check
+#
+# Validates that Drizzle (or any jq-parseable) migration journal stays consistent.
+#
+# HOW TO CUSTOMIZE:
+#   Set JOURNAL_DIR in the env block below to match your project structure.
+#   Examples:
+#     src/db/migrations        (default — Drizzle monolith)
+#     packages/db/migrations   (monorepo package)
+#     backend/migrations       (flat backend layout)
+#
+# The journal file is always resolved as $JOURNAL_DIR/meta/_journal.json
+
+name: Migrations Check
+
+on:
+  push:
+    branches:
+      - test
+      - main
+  pull_request:
+    branches:
+      - test
+      - main
+
+env:
+  JOURNAL_DIR: src/db/migrations   # <-- change this for your project layout
+
+jobs:
+  migrations-check:
+    name: Validate migration journal integrity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history so we can compare against the base branch
+          fetch-depth: 0
+
+      # ---------------------------------------------------------------
+      # CHECK 1: Every tag in _journal.json must have a matching SQL file.
+      # Catches: journal entry added but migration file was deleted or
+      # never committed.
+      # ---------------------------------------------------------------
+      - name: Check every journal tag has a matching SQL file
+        run: |
+          JOURNAL="$JOURNAL_DIR/meta/_journal.json"
+
+          if [ ! -f "$JOURNAL" ]; then
+            echo "ERROR: Journal file not found at $JOURNAL"
+            exit 1
+          fi
+
+          missing=0
+          while IFS= read -r tag; do
+            sql_file="$JOURNAL_DIR/$tag.sql"
+            if [ ! -f "$sql_file" ]; then
+              echo "MISSING SQL: $sql_file (tag '$tag' is in journal but file does not exist)"
+              missing=$((missing + 1))
+            fi
+          done < <(jq -r '.entries[].tag' "$JOURNAL")
+
+          if [ "$missing" -gt 0 ]; then
+            echo "ERROR: $missing journal tag(s) have no corresponding SQL file."
+            exit 1
+          fi
+
+          echo "OK: All journal tags have matching SQL files."
+
+      # ---------------------------------------------------------------
+      # CHECK 2: Every numbered SQL file must appear in the journal.
+      # Catches: migration file added to the directory but the journal
+      # was not updated (e.g. hand-crafted SQL dropped in without
+      # running drizzle-kit generate).
+      # ---------------------------------------------------------------
+      - name: Check every numbered SQL file appears in journal
+        run: |
+          JOURNAL="$JOURNAL_DIR/meta/_journal.json"
+
+          untracked=0
+          for sql_file in "$JOURNAL_DIR"/[0-9]*.sql; do
+            # Glob returns the literal pattern when no files match — skip that case
+            [ -f "$sql_file" ] || continue
+
+            tag=$(basename "$sql_file" .sql)
+            match=$(jq -r --arg tag "$tag" '.entries[] | select(.tag == $tag) | .tag' "$JOURNAL")
+
+            if [ -z "$match" ]; then
+              echo "UNTRACKED SQL: $sql_file (no journal entry for tag '$tag')"
+              untracked=$((untracked + 1))
+            fi
+          done
+
+          if [ "$untracked" -gt 0 ]; then
+            echo "ERROR: $untracked SQL file(s) are not recorded in the journal."
+            exit 1
+          fi
+
+          echo "OK: All numbered SQL files are recorded in the journal."
+
+      # ---------------------------------------------------------------
+      # CHECK 3: Journal must not regress vs the base branch.
+      # Catches: squashed or rebased branches that silently drop
+      # migration entries that already exist on origin/main or
+      # origin/test, which would corrupt deployed databases.
+      # ---------------------------------------------------------------
+      - name: Check journal does not regress vs base branch
+        run: |
+          JOURNAL="$JOURNAL_DIR/meta/_journal.json"
+
+          # Determine which base branch to compare against.
+          # For PRs use the target branch; for direct pushes use the
+          # branch being pushed to (main or test).
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            BASE_BRANCH="${{ github.base_ref }}"
+          else
+            BASE_BRANCH="${GITHUB_REF#refs/heads/}"
+          fi
+
+          # Resolve the remote tracking ref (origin/main or origin/test)
+          REMOTE_REF="origin/$BASE_BRANCH"
+
+          # Fetch if the ref is not yet available locally
+          git fetch origin "$BASE_BRANCH" --depth=1 2>/dev/null || true
+
+          # Read tags from the base branch version of the journal (may not
+          # exist on brand-new repos — skip gracefully in that case)
+          BASE_JOURNAL=$(git show "$REMOTE_REF:$JOURNAL_DIR/meta/_journal.json" 2>/dev/null || echo "")
+
+          if [ -z "$BASE_JOURNAL" ]; then
+            echo "INFO: No journal found on $REMOTE_REF — skipping regression check."
+            exit 0
+          fi
+
+          regressed=0
+          while IFS= read -r tag; do
+            match=$(jq -r --arg tag "$tag" '.entries[] | select(.tag == $tag) | .tag' "$JOURNAL")
+            if [ -z "$match" ]; then
+              echo "REGRESSION: tag '$tag' exists on $REMOTE_REF but is missing from the current branch."
+              regressed=$((regressed + 1))
+            fi
+          done < <(echo "$BASE_JOURNAL" | jq -r '.entries[].tag')
+
+          if [ "$regressed" -gt 0 ]; then
+            echo "ERROR: $regressed migration tag(s) were removed compared to $REMOTE_REF."
+            echo "Removing applied migrations from the journal breaks deployed databases."
+            exit 1
+          fi
+
+          echo "OK: Journal does not regress vs $REMOTE_REF."
+```

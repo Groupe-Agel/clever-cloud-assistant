@@ -1,0 +1,1 @@
+C:\Users\thelo\Documents\clever-cloud-assistant\skills\cc-migrations\SKILL.md

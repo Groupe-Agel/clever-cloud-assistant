@@ -1,0 +1,1 @@
+C:\Users\thelo\Documents\clever-cloud-assistant\docs\known-gotchas.md

@@ -1,0 +1,38 @@
+# Prod (main) deploys automatically via CC's GitHub integration — no workflow needed.
+# This workflow handles test branch → Clever Cloud test app deploys via SSH.
+#
+# SSH host: check CC Console → App (test) → Information tab → Git deployment
+# Example Paris region host: push-n3-par-clevercloud-customers.services.clever-cloud.com
+
+name: Deploy to Clever Cloud (test)
+
+on:
+  push:
+    branches:
+      - test
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.CLEVER_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Replace the host below with the value from CC Console → App (test) → Information → Git deployment
+          ssh-keyscan -H push-n3-par-clevercloud-customers.services.clever-cloud.com >> ~/.ssh/known_hosts
+
+      - name: Deploy to Clever Cloud test app
+        run: |
+          # HEAD:master — CC expects pushes to its internal master branch regardless of your branch name.
+          # --force — required because CC rewrites history on its end; a non-fast-forward push would be rejected.
+          git push git+ssh://git@push-n3-par-clevercloud-customers.services.clever-cloud.com/APP_TEST_ID.git HEAD:master --force
+        # APP_TEST_ID: replace with your actual Clever Cloud app ID (e.g. app_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+        # Found in CC Console → App (test) → Information tab → Git deployment URL
