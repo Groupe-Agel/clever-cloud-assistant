@@ -1,1 +1,82 @@
-`C:\Users\thelo\Documents\clever-cloud-assistant\templates\CLAUDE.md.template` created with all requested sections and `{{PLACEHOLDER}}` syntax throughout.
+# {{PROJECT_NAME}} — CLAUDE.md
+
+## Clever Cloud apps
+
+| Environment | App name | App ID | SSH zone | URL |
+|---|---|---|---|---|
+| test | {{APP_TEST_NAME}} | {{APP_TEST_ID}} | {{ZONE}} (CC Console → App → Information) | {{APP_TEST_URL}} |
+| prod | {{APP_PROD_NAME}} | {{APP_PROD_ID}} | {{ZONE}} | {{APP_PROD_URL}} |
+
+> SSH zone: read the exact hostname from CC Console → App → Information tab → Git deployment URL.
+> It is NOT a marketing region name ("EU West", "NA") — it's a zone identifier like `par`, `mtl`, etc.
+
+---
+
+## Branch convention
+
+| Branch | Environment | Deploy |
+|---|---|---|
+| `main` | Production | Auto-deploy via CC native GitHub integration |
+| `test` | Staging | GitHub Actions → SSH push on every push to `test` |
+| `feat/*` | — | CI only (lint, typecheck, build — no deploy) |
+
+---
+
+## Deploy
+
+```
+/cc-deploy --app test
+/cc-deploy --app prod
+```
+
+---
+
+## Migrations
+
+- **ORM**: {{ORM_NAME}} (drizzle | prisma | alembic | other)
+- **Migrations path**: {{MIGRATIONS_PATH}} (e.g. `src/db/migrations`)
+- **Run command**: {{MIGRATE_COMMAND}} (e.g. `npm run db:migrate`)
+- **CC hook**: `CC_PRE_RUN_HOOK={{MIGRATE_COMMAND}}` — set in CC Console env vars
+  - Use `CC_PRE_RUN_HOOK`, NOT `CC_PRE_BUILD_HOOK` (pre-build fires before npm install)
+
+---
+
+## Health check
+
+- **Endpoint**: {{HEALTH_ENDPOINT}} (e.g. `/health`)
+- **CC env var**: `CC_HEALTH_CHECK_PATH={{HEALTH_ENDPOINT}}` — set on both test and prod apps
+- Response format: `{ "status": "ok", "version": "x.y.z" }`
+
+---
+
+## Key env vars
+
+| Variable | test | prod | Notes |
+|---|---|---|---|
+| `DATABASE_URL` | set in CC | set in CC | Runtime — `clever restart` to apply |
+| `CC_PRE_RUN_HOOK` | `{{MIGRATE_COMMAND}}` | `{{MIGRATE_COMMAND}}` | Build-affecting — full redeploy required |
+| `CC_HEALTH_CHECK_PATH` | `{{HEALTH_ENDPOINT}}` | `{{HEALTH_ENDPOINT}}` | |
+| `NODE_ENV` | `staging` | `production` | |
+
+**Runtime vars** (`clever restart` is enough): `DATABASE_URL`, `REDIS_URL`, `API_KEY`, secrets.
+**Build-affecting vars** (require full redeploy + rebuild): `CC_NODE_VERSION`, `CC_PRE_RUN_HOOK`, `CC_PRE_BUILD_HOOK`.
+
+---
+
+## CC CLI quick reference
+
+```bash
+clever deploy -f                      # deploy current branch
+clever status                         # current app state
+clever logs --since 30m | tail -80    # recent logs (snapshot)
+clever restart                        # restart (reuses build)
+clever restart --commit <sha>         # rollback to a specific commit
+clever activity                       # deployment history
+clever env set KEY=VALUE              # set one env var
+```
+
+---
+
+## Known project-specific gotchas
+
+- {{ADD_PROJECT_SPECIFIC_GOTCHAS_HERE}}
