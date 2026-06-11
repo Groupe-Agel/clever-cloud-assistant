@@ -72,10 +72,13 @@ timeout 30 clever logs --app <APP_ID> --since 2h | tail -80
 ## Failure triage path
 
 1. **Check CC_HEALTH_CHECK_PATH response** — what HTTP status is it returning?
-2. **Check logs**: `clever logs --app <id> --since 2h --until 5s | tail -80`
-3. **Check migration status**: did `CC_PRE_RUN_HOOK` complete? Migration errors in logs?
-4. **Check env vars**: `clever env | grep -E "(DATABASE|REDIS|PORT)"` — missing required vars?
-5. **Check CC Console → Activity** — deployment events and error messages
+2. **Check the deploy trigger**: `clever activity --app <id> | tail -3` — a restart triggered by **`Monitoring/Unreachable`** (instead of `github`/`Console`) means CC's monitor killed the instance because health checks timed out, typically because heavy in-process work starved the event loop. Any background task running at that moment died mid-flight.
+3. **Check logs**: `clever logs --app <id> --since 2h --until 5s | tail -80`
+4. **Check migration status**: did `CC_PRE_RUN_HOOK` complete? Migration errors in logs?
+5. **Check env vars**: `clever env | grep -E "(DATABASE|REDIS|PORT)"` — missing required vars?
+6. **Check CC Console → Activity** — deployment events and error messages
+
+**Post-mortem on an ended deploy**: `clever logs` works retroactively with explicit bounds — `clever logs --app <id> --since "2026-06-11T14:00:00+02:00" --until "2026-06-11T14:30:00+02:00"` (ISO-8601 with explicit offset) retrieves logs from a window that's already over.
 
 ---
 

@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial project setup for clever-cloud-assistant.
 - `install.ps1` (Windows) and `install.sh` (Unix) installers — copy components into `~/.claude/` and optionally register the pre-deploy hook in `settings.json` (with backup, idempotent).
+- **7 new gotchas (11-17) sourced from real production incidents**: Monitoring/Unreachable killswitch, TypeScript build stall on small instances (+ cancel/restart cache-preservation recovery), `clever deploy` 401 on GitHub-integrated apps, Postgres add-on ~5-connection cap vs pg.Pool defaults, Drizzle out-of-sync tracking table silent rollback, Drizzle migration authoring rules (transaction/splitter/comment-blind traps), main/master divergence.
+- `migrations-check.yml`: two new CI checks — journal `when` monotonicity (drizzle-orm silently skips out-of-order entries) and breakpoint-token-inside-comments rejection (the splitter is comment-blind).
+- cc-migrations: "the success message lies" post-apply verification discipline, tracking-table bootstrap trap, stale-`when` recovery procedure, migration authoring rules.
+- cc-deploy: GitHub-integration 401 note, `--force` does-not-override-same-commit-policy trap, stuck-build cancel/restart recovery.
+- cc-healthcheck: `Monitoring/Unreachable` triage step, retroactive log retrieval with ISO-8601 bounds.
 
 ### Fixed
 Findings from a full empirical test drive against clever-tools v4.4.1:

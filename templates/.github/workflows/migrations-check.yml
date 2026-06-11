@@ -160,3 +160,58 @@ jobs:
           fi
 
           echo "OK: Journal does not regress vs $BASE_REF."
+
+      # ---------------------------------------------------------------
+      # CHECK 4: Journal "when" timestamps must be strictly increasing.
+      # Catches: hand-edited or rewritten journal entries with stale
+      # "when" values. drizzle-orm only applies entries whose "when" is
+      # greater than the newest applied timestamp — an out-of-order
+      # entry is silently skipped on every deploy, forever, while
+      # drizzle-kit still prints "migrations applied successfully".
+      # ---------------------------------------------------------------
+      - name: Check journal "when" timestamps are monotonic
+        run: |
+          JOURNAL="$JOURNAL_DIR/meta/_journal.json"
+
+          NON_MONOTONIC=$(jq '[.entries[].when] as $w
+            | [range(1; $w | length) | select($w[.] <= $w[. - 1])] | length' "$JOURNAL")
+
+          if [ "$NON_MONOTONIC" -gt 0 ]; then
+            echo "ERROR: $NON_MONOTONIC journal entr(y/ies) have a \"when\" <= the previous entry's."
+            echo "drizzle-orm silently skips out-of-order entries — they will NEVER be applied."
+            echo "Fix: bump the stale \"when\" to a value greater than every earlier entry."
+            jq -r '.entries[] | "\(.idx)\t\(.when)\t\(.tag)"' "$JOURNAL"
+            exit 1
+          fi
+
+          echo "OK: Journal \"when\" timestamps are strictly increasing."
+
+      # ---------------------------------------------------------------
+      # CHECK 5: No statement-breakpoint token inside SQL comments.
+      # Catches: explanatory comments that mention drizzle's breakpoint
+      # marker literally. The migration splitter is comment-blind — it
+      # splits on the token even inside a comment, tearing the file
+      # into invalid SQL fragments and aborting the deploy with a
+      # generic "PRE_RUN_HOOK failed".
+      # ---------------------------------------------------------------
+      - name: Check no breakpoint token inside SQL comments
+        run: |
+          bad=0
+          for sql_file in "$JOURNAL_DIR"/[0-9]*.sql; do
+            [ -f "$sql_file" ] || continue
+
+            # A legitimate marker line starts with the token itself.
+            # Flag lines where comment text precedes the token.
+            if grep -nE -e '--[^>].*--> statement-breakpoint' -e '/\*.*--> statement-breakpoint' "$sql_file"; then
+              echo "COMMENT-EMBEDDED TOKEN in $sql_file (lines above)"
+              bad=$((bad + 1))
+            fi
+          done
+
+          if [ "$bad" -gt 0 ]; then
+            echo "ERROR: $bad file(s) mention the breakpoint token inside a comment."
+            echo "The splitter is comment-blind and will split there. Paraphrase the token instead."
+            exit 1
+          fi
+
+          echo "OK: No breakpoint tokens inside comments."

@@ -34,7 +34,11 @@ CLEVER_TOKEN=xxx CLEVER_SECRET=xxx clever deploy -f
 
 **App linking:** `clever deploy` needs to know which app to target — either the repo is linked (`clever link <APP_ID>` creates `.clever.json`) or pass `--alias`/`-a <alias>` explicitly. In an unlinked directory the deploy fails immediately.
 
-**Redeploying an unchanged commit:** `--same-commit-policy` defaults to `error` — a redeploy with no new commit fails. Use `clever deploy -f --same-commit-policy rebuild` (full rebuild) or `restart` (reuse the build), e.g. after changing a build-affecting env var.
+**Redeploying an unchanged commit:** `--same-commit-policy` defaults to `error` — a redeploy with no new commit fails. Use `clever deploy -f --same-commit-policy rebuild` (full rebuild) or `restart` (reuse the build), e.g. after changing a build-affecting env var. Two traps: `--force` does **not** override this policy (it only force-pushes), and without `--verbose` the error can be masked by terse output that reads like a successful deploy — use `--verbose` for diagnostic deploys.
+
+**GitHub-integrated apps:** if the app deploys via CC's native GitHub integration (the recommended prod setup), `clever deploy` is rejected with a 401 — deploys only happen by pushing to the tracked GitHub branch. Push there and monitor with `clever activity --app <id>`.
+
+**Stuck build recovery:** if a deploy hangs in the build phase (e.g. TypeScript validation on a small instance — see gotcha 12), `clever cancel-deploy` then `clever restart`. The cancelled deploy's **build cache is preserved**, so the retry is fast (~3 min vs stuck indefinitely).
 
 **Important:** `clever deploy` exits at **deploy-end** (build + stream finished), not at app-healthy. A successful exit does not mean the app is running. Always invoke cc-healthcheck after. (`--exit-on never` / `--follow` keep it attached longer if needed.)
 

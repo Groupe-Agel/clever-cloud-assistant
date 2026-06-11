@@ -62,7 +62,7 @@ Ideal for: multi-step migrations, long-running migrations, strict migration cont
 
 **Symptom**: migrations silently skipped; deployed code expects columns that don't exist in DB.
 
-**Root cause**: `_journal.json` entries have modified `"when"` timestamps → Drizzle skips them.
+**Root cause**: `_journal.json` entries have modified `"when"` timestamps → Drizzle skips them. Mechanically: the migrator only applies entries whose `when` is **greater than** the newest `created_at` in `__drizzle_migrations` — any out-of-order `when` is treated as already-applied, no hash check.
 
 **Rule: the journal is append-only:**
 - Never edit existing `"when"` values
@@ -70,7 +70,32 @@ Ideal for: multi-step migrations, long-running migrations, strict migration cont
 - Never delete entries
 - Only append new entries at the end
 
-Add `migrations-check.yml` to CI (template in this repo) to catch regressions before deploy.
+**Recovery for a stuck entry** (hand-edited or rewritten journal): bump its `when` to a value strictly greater than `MAX(created_at)` in `__drizzle_migrations`. The SQL file doesn't need to change.
+
+Add `migrations-check.yml` to CI (template in this repo) — it checks journal/SQL consistency, `when` monotonicity, and breakpoint-token hygiene before deploy.
+
+---
+
+## Drizzle's success message lies — verify every apply
+
+`[✓] migrations applied successfully!` means the migrator function returned, **not** that the DB changed. Three documented ways it prints success while doing nothing (stale `when` above; out-of-sync tracking table; in-transaction rollback below). After every migrate:
+
+```sql
+-- 1. Row count must match the journal entry count
+SELECT COUNT(*) FROM drizzle.__drizzle_migrations;
+-- 2. Spot-check an artifact the migration was supposed to create
+SELECT column_name FROM information_schema.columns WHERE table_name = '<table>';
+```
+
+**Tracking-table trap**: if the schema was originally bootstrapped outside drizzle (raw SQL, dump-restore), `__drizzle_migrations` is empty → drizzle re-runs `0000` → `table already exists` → full rollback → exit 0. Bootstrap the tracking table (INSERT rows for pre-applied migrations) before drizzle can ever apply cleanly.
+
+---
+
+## Migration authoring rules (transaction + splitter traps)
+
+1. **One DDL statement per `;--> statement-breakpoint`.** A file without breakpoints runs as a single transaction; if any statement can't run in a transaction (`ALTER TYPE … ADD VALUE`), everything rolls back — while still printing success.
+2. **No `DO $$ … END $$` blocks** — the splitter cuts on every `;`, tearing dollar-quoted bodies into invalid fragments. Move conditional logic to application code.
+3. **Never write the literal breakpoint token in comments** — the splitter is comment-blind and will split there too, producing garbage fragments and a generic `PRE_RUN_HOOK failed`.
 
 ---
 

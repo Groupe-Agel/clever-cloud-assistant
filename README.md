@@ -34,7 +34,7 @@ Pain points covered (see `docs/known-gotchas.md` for the full list):
 | Hook | cc-pre-deploy-validate | Advisory pre-deploy checks |
 | Template | CLAUDE.md.template | Drop-in CLAUDE.md for any CC project |
 | Templates | deploy-test.yml, migrations-check.yml | Ready-to-use GitHub Actions workflows |
-| Docs | known-gotchas.md | 10 common CC pain points and fixes |
+| Docs | known-gotchas.md | 17 production-incident-sourced CC pain points and fixes |
 
 ## Quick install
 
