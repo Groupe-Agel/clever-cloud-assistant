@@ -54,11 +54,14 @@ clever logs --app <APP_ID> --since 30m --until 5s | grep -i error | tail -40
 
 ### Env vars
 ```bash
-clever env                              # list all vars
+clever env | grep -E "^(KEY1|KEY2)="    # ALWAYS filter to the requested keys —
+                                        # a bare `clever env` dumps live secrets into the transcript
 clever env set KEY VALUE                # set one var (two args, NOT KEY=VALUE);
                                         # applies on next restart/deploy — does not restart by itself
 # WARNING: clever env import DELETES ALL EXISTING VARIABLES — never use in scripts
 ```
+
+**Secrets discipline:** when asked whether a secret-bearing var (DATABASE_URL, API keys, tokens) is set, report the variable NAME and set/unset status only — never echo the value (`clever env | cut -d= -f1` when listing names).
 
 ### Restart & Rollback
 ```bash

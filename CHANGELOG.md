@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - cc-healthcheck: `Monitoring/Unreachable` triage step, retroactive log retrieval with ISO-8601 bounds.
 
 ### Fixed
+Findings from the live in-session test run (2026-06-11, `docs/TESTING.md` Run 1 — all executed phases green):
+- **Pre-deploy hook stalled ~3 minutes per deploy** when the Claude Code session starts in a broad directory (e.g. `$HOME`): the Drizzle journal scan ran `find .` from the hook process cwd, unbounded. The hook now cd's to the `cwd` field of the hook input JSON and scopes the scan to `git rev-parse --show-toplevel`, skipping it entirely outside a git repo (0.65s from `$HOME`, was 3m04s).
+- **`cwd` extraction had no jq fallback** — on machines without `jq` the hook silently kept its own cwd, so the dirty-tree and journal checks ran against the wrong directory. Added the same grep fallback used for the command string, converting JSON-escaped `\\` to `/` for Windows paths.
+
 Findings from a full empirical test drive against clever-tools v4.4.1:
 - **All log snapshot recipes hung forever** — `clever logs ... | tail` never terminates because the stream never closes. Every recipe now bounds the window with `--until 5s` (verified to exit in ~12s). Also documented: `--since`/`--until` need a unit suffix; bare numbers silently live-stream.
 - **`migrations-check.yml` was invalid YAML** — shipped wrapped in markdown code fences. Fences removed; also fixed the regression check being a no-op on push events (now compares against `github.event.before`) and added a malformed-journal guard.

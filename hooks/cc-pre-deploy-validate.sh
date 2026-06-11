@@ -37,6 +37,21 @@ if [ "$IS_DEPLOY" -eq 0 ]; then
     exit 0
 fi
 
+# Run checks from the session cwd Claude Code passes in the hook input —
+# the hook process itself may start elsewhere (e.g. the user's home dir).
+HOOK_CWD=""
+if command -v jq >/dev/null 2>&1; then
+    HOOK_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+fi
+if [ -z "$HOOK_CWD" ]; then
+    # No jq: extract "cwd" by grep and turn JSON-escaped backslashes into
+    # forward slashes (git-bash accepts both as path separators)
+    HOOK_CWD=$(printf '%s' "$INPUT" \
+        | grep -o '"cwd"[[:space:]]*:[[:space:]]*"[^"]*"' \
+        | sed 's/^"cwd"[[:space:]]*:[[:space:]]*"//;s/"$//;s/\\\\/\//g')
+fi
+[ -n "$HOOK_CWD" ] && [ -d "$HOOK_CWD" ] && cd "$HOOK_CWD" 2>/dev/null
+
 # ---------------------------------------------------------------------------
 # Check 1 — Dirty working tree
 # ---------------------------------------------------------------------------
@@ -50,7 +65,14 @@ fi
 # drizzle-kit pretty-prints the journal ("tag": "...") and puts .sql files in
 # the PARENT of meta/ — tolerate whitespace and check both locations.
 # ---------------------------------------------------------------------------
-JOURNAL_FILES=$(find . -name "_journal.json" -not -path "*/node_modules/*" 2>/dev/null)
+# Scope the scan to the git repo root — an unbounded `find .` from a broad
+# cwd (e.g. $HOME) walks the entire tree and can stall the hook for minutes.
+# Outside a repo there is nothing to deploy from, so skip the check.
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+JOURNAL_FILES=""
+if [ -n "$REPO_ROOT" ]; then
+    JOURNAL_FILES=$(find "$REPO_ROOT" -name "_journal.json" -not -path "*/node_modules/*" 2>/dev/null)
+fi
 if [ -n "$JOURNAL_FILES" ]; then
     while IFS= read -r JOURNAL_PATH; do
         [ -z "$JOURNAL_PATH" ] && continue

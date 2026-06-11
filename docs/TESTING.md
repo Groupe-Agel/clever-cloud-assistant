@@ -97,3 +97,29 @@ Copy this table when executing; anything failed → file an issue on the repo.
 | 4 | 2-4 | | | |
 | 5 | 3 | | | |
 | 6 | 5 | | | |
+
+---
+
+## Run 1 — 2026-06-11 (live session, OTED test apps)
+
+Target: OTED repo (`Documents/Agel/Dev/Oted`) + OTED-BackEnd_Test (`app_cfa61ba3`) / OTED-Dashboard_Test (`app_30cb301f`). LicenseHub/AgentHub test apps no longer exist (stale IDs).
+
+| Phase | Items | Pass | Fail | Notes |
+|---|---|---|---|---|
+| 0 | 4 | 4 | 0 | Skills/commands/agent all hot-loaded after restart; hook registered |
+| 1 | 5 | 5 | 0 | 1.3 `--until` bound works (no hang); 1.5 fallback verified via cc-ops 58-app enumeration, not literally from a no-CLAUDE.md dir |
+| 2 | 4 | 4 | 0 | Verified by direct script invocation — exit-0 hook stderr is NOT visible to the model (see finding F2) |
+| 3 | 3 | 3 | 0 | cc-ops formats cleanly, no raw JSON, never suggests `clever env import` |
+| 4 | 2 | 2 | 0 | 4.1 deploy+healthcheck OK (external polling — no CC_HEALTH_CHECK_PATH on app); 4.2 same-commit error surfaces clearly. 4.3/4.4 skipped (optional) |
+| 5 | 3 | 3 | 0 | Templates: valid YAML, no project-specific IDs |
+| 6 | 5 | — | — | Deferred (optional, needs sandbox repo) |
+
+### Findings
+
+- **F1 (critical, FIXED this run):** hook ran `find .` unbounded from the hook process cwd — 3m04s stall when the session starts in `$HOME`. Fixed: hook now cd's to the `cwd` from hook input JSON and scopes the journal scan to `git rev-parse --show-toplevel`; skips it outside a repo. From-home runtime: 0.65s.
+- **F2 (design):** advisory warnings (stderr + exit 0) are visible only in the user's transcript, never to the model — the model cannot react to them. Acceptable for advisory-only, but document it.
+- **F3 (FIXED this run):** `jq` is not installed on this machine; the `.cwd` extraction needed the same grep fallback the command extraction already had (incl. JSON `\\` → `/` unescaping for Windows paths).
+- **F4 (gotcha):** after the same-commit-policy error, clever-tools v4.4.1 on Windows prints `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), src\win\async.c` — cosmetic noise after the real error, not a failure of the deploy command itself.
+- **F5 (cc-ops guideline):** the harness security-flagged cc-ops for running bare `clever env` (pulls secrets into the subagent transcript). cc-ops.md should instruct: always `clever env | grep <requested keys>` / report names-only for secrets.
+- **F6 (app config):** OTED API has no `/health` endpoint and neither OTED test app sets `CC_HEALTH_CHECK_PATH` — add both to get native zero-downtime validation.
+- **Open question:** a deploy of OTED-Dashboard_Test started 2026-06-11 13:41:35 triggered by "Clever Tools" — confirmed NOT from this session (cc-ops transcript audited, read-only commands only). Likely a console/CLI retry of the failed 2026-06-05 deploy.
