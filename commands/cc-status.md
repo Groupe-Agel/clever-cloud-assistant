@@ -13,7 +13,9 @@ Show the current status of all Clever Cloud apps in this project, or a single ap
 ### Without `--app` (default — show all)
 
 1. Read all app IDs and URLs from CLAUDE.md "Clever Cloud apps" table
-2. Via cc-ops agent: run `clever status` + `clever activity --limit 1` for each app
+   - If the project has no CLAUDE.md apps table: fall back to `clever applications list` and ask which apps to include
+2. Via cc-ops agent: run `clever status --app <ID>` + `clever activity --app <ID> | tail -1` for each app
+   - `clever activity` has **no `--limit` flag** and prints **oldest-first** — the last line is the most recent deploy
 3. Return status matrix:
 
 | Environment | App ID | Status | Last deploy | URL |
@@ -24,15 +26,17 @@ Show the current status of all Clever Cloud apps in this project, or a single ap
 ### With `--app`
 
 1. Resolve app ID from CLAUDE.md or use directly
-2. Via cc-ops agent: `clever status` + `clever activity --limit 3`
-3. Return single-app detail: status, last 3 deployments with timestamps, URL
+2. Via cc-ops agent: `clever status --app <ID>` + `clever activity --app <ID> | tail -3`
+3. Return single-app detail: status, last 3 deployments with timestamps, URL (`clever domain --app <ID>` if not in CLAUDE.md)
 
 ## Status interpretation
 
-| Status | Meaning |
+`clever status` output looks like: `running (1*XS, Commit: abc1234...)` or a stopped-state line.
+`clever activity` rows end in `OK` / `FAIL` per deployment.
+
+| Signal | Meaning |
 |---|---|
-| `running` | App is serving traffic normally |
+| `running (N*SIZE, Commit: ...)` | App is serving traffic normally |
 | `stopped` | App is not running |
-| `wants to be up` | Deploy in progress |
-| `deploy in progress` | Build/start underway — use `/cc-logs` to follow |
-| `start failed` | App crashed on start — check logs immediately |
+| Last activity row `FAIL` | Most recent deployment failed — check `/cc-logs` |
+| Status `running` but old commit | A newer deploy failed and the previous build kept serving |

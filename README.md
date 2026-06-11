@@ -6,18 +6,18 @@
 
 Building on Clever Cloud means re-learning the same sharp edges again and again: hooks that fire in the wrong order, migrations that race the app start, SSH deploys that silently diverge from CLI deploys, log commands that dump noise instead of signal. This pack codifies the fixes so you stop losing hours to infrastructure friction.
 
-Pain points covered:
+Pain points covered (see `docs/known-gotchas.md` for the full list):
 
-- `CC_RUN_SUCCEEDED` fires before migrations finish — the correct hook for post-build tasks is `post-build`, not `run`
-- SSH pushes bypass the Clever Cloud build pipeline and break when the remote URL changes
-- Database migrations run inside the web process instead of a dedicated one-off, causing race conditions on deploy
-- No pre-flight validation — bad env vars or missing addons are discovered at runtime, not before push
-- `clever logs` output is unfiltered; finding errors requires manual grep across thousands of lines
-- Health checks are skipped after deploy, so silent failures go undetected until users hit them
-- GitHub Actions workflows re-implement Clever Cloud native deploy rather than delegating to the CC API
-- `clever env set` applied one variable at a time instead of bulk-importing from `.env` files
-- App status across multiple regions and environments requires running separate CLI commands manually
-- CLAUDE.md is never written for CC projects, so Claude has no app IDs, zone context, or deploy method in scope
+- Migrations placed in `CC_PRE_BUILD_HOOK` fail with "Cannot find module" — it fires before `npm install`; the correct hook is `CC_PRE_RUN_HOOK`
+- Drizzle journal regressions: edited `"when"` timestamps make migrations silently skip, leaving prod code expecting columns the DB doesn't have
+- `CC_PRE_RUN_HOOK` runs on **every** instance on horizontal scale — non-idempotent migrations race each other
+- `clever logs | tail` hangs forever — the stream never closes; you need `--until` to get a snapshot
+- "Deploy succeeded" ≠ "app healthy" — `clever deploy` exits at deploy-end; without `CC_HEALTH_CHECK_PATH` a crashed app goes unnoticed
+- Two confusable SSH hosts (git push vs instance gateway) and zone names that aren't the marketing region names
+- Force-push panic: CC rewrites its remote history by design, so non-fast-forward is *expected*
+- `clever env import` silently **deletes all existing variables**
+- Build-affecting env vars need a full redeploy, not a restart — and `.git` is deleted during build (`CC_COMMIT_ID` instead of `git rev-parse`)
+- No project CLAUDE.md for CC apps, so Claude has no app IDs, zone, or deploy method in scope
 
 ## What's included
 
@@ -38,16 +38,20 @@ Pain points covered:
 
 ## Quick install
 
-Copy components to your Claude Code user directory:
-
-```
-skills/    → ~/.claude/skills/
-agents/    → ~/.claude/agents/
-commands/  → ~/.claude/commands/
-hooks/     → ~/.claude/hooks/
+**Windows (PowerShell):**
+```powershell
+.\install.ps1 -RegisterHook
 ```
 
-> `install.sh` coming in Phase 2.
+**macOS / Linux / Git Bash:**
+```bash
+./install.sh --register-hook
+```
+
+This copies skills, agent, commands, and the hook into `~/.claude/`, and (with the flag) registers the pre-deploy hook in `~/.claude/settings.json` (backup taken first). Restart your Claude Code session afterwards.
+
+> Copying the hook file alone does nothing — PreToolUse hooks must be registered in `settings.json`. The installer handles it; doing it manually, add under `hooks.PreToolUse` (matcher `"Bash"`):
+> `{ "type": "command", "command": "bash ~/.claude/hooks/cc-pre-deploy-validate.sh" }`
 
 ## Usage
 
@@ -71,7 +75,17 @@ Copy `templates/CLAUDE.md.template` to your project root and fill in your app ID
 
 ```bash
 cp templates/CLAUDE.md.template ./CLAUDE.md
-# Edit: CLEVER_APP_TEST, CLEVER_APP_PROD, DEPLOY_ZONE, MIGRATION_COMMAND
+# Fill in the {{...}} placeholders: {{APP_TEST_ID}}, {{APP_PROD_ID}}, {{ZONE}},
+# {{MIGRATE_COMMAND}}, {{HEALTH_ENDPOINT}}, ...
+```
+
+For CI/CD, copy the GitHub Actions templates too:
+
+```bash
+cp templates/.github/workflows/deploy-test.yml      .github/workflows/
+cp templates/.github/workflows/migrations-check.yml .github/workflows/
+# deploy-test.yml: set your test app ID + push host; add CLEVER_SSH_KEY secret
+# migrations-check.yml: set JOURNAL_DIR to your migrations path
 ```
 
 ## Requirements
@@ -79,7 +93,7 @@ cp templates/CLAUDE.md.template ./CLAUDE.md
 - [Claude Code CLI](https://docs.anthropic.com/claude-code)
 - [Clever Cloud CLI](https://www.clever-cloud.com/doc/clever-tools/getting_started/) (`clever`) — required for Method A deploys
 - SSH deploy key configured on your CC app — required for Method B deploys
-- `jq` — used by the hook journal checks
+- `jq` — optional; the hook uses it when present and falls back to shell parsing without it (CI workflows do require it, but it's preinstalled on `ubuntu-latest`)
 
 ## License
 

@@ -9,6 +9,8 @@
 
 > SSH zone: read the exact hostname from CC Console → App → Information tab → Git deployment URL.
 > It is NOT a marketing region name ("EU West", "NA") — it's a zone identifier like `par`, `mtl`, etc.
+> Two different hosts — git deploys go to `push-<n>-<zone>-clevercloud-customers.services.clever-cloud.com`;
+> interactive instance SSH goes to `sshgateway-clevercloud-customers.services.clever-cloud.com`. Do not conflate.
 
 ---
 
@@ -66,17 +68,19 @@
 ## CC CLI quick reference
 
 ```bash
-clever deploy -f                      # deploy current branch
-clever status                         # current app state
-clever logs --since 30m | tail -80    # recent logs (snapshot)
-clever restart                        # restart (reuses build)
-clever restart --commit <sha>         # rollback to a specific commit
-clever activity                       # deployment history
-clever env set KEY=VALUE              # set one env var
+clever deploy -f                                # deploy current branch
+clever status                                   # current app state
+clever logs --since 30m --until 5s | tail -80   # recent logs (--until bounds the stream so tail can flush)
+clever restart                                  # restart (reuses build)
+clever restart --commit <sha>                   # rollback to a specific commit
+clever activity                                 # deployment history (oldest-first — `| tail -1` = latest)
+clever env set KEY VALUE                        # set one env var (two args, not KEY=VALUE)
 ```
 
 ---
 
 ## Known project-specific gotchas
+
+See the full platform gotchas list: `docs/known-gotchas.md` in [clever-cloud-assistant](https://github.com/Groupe-Agel/clever-cloud-assistant).
 
 - {{ADD_PROJECT_SPECIFIC_GOTCHAS_HERE}}

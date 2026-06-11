@@ -22,7 +22,7 @@ No Docker. Clever Cloud apps run natively (Node, Python, Java, etc.).
 In CC Console or via `clever` CLI:
 1. Create **test** and **prod** apps
 2. Note both App IDs (`app_xxxxxxxx-...`) — you'll need them in the workflow and CLAUDE.md
-3. Configure env vars on each app (DATABASE_URL, etc.)
+3. Configure env vars on each app — note CC add-ons inject their own names (Postgres: `POSTGRESQL_ADDON_URI`, Redis: `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD`); alias to `DATABASE_URL` etc. if your app expects those
 4. **Prod only**: CC Console → App → Information → GitHub integration → branch: `main` (replaces a workflow entirely)
 
 ---
@@ -42,7 +42,7 @@ ssh-keygen -t ed25519 -C "github-actions-deploy" -f clever_deploy_key -N ""
 ## Step 3 — `.github/workflows/deploy.yml`
 
 Copy `templates/.github/workflows/deploy-test.yml` from this repo and replace:
-- `APP_TEST_ID` → your actual test app ID (e.g. `app_41bd74d5-...`)
+- `APP_TEST_ID` → your actual test app ID (e.g. `app_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)
 - SSH host → get from CC Console → App (test) → Information tab → Git deployment URL
 
 **Why the SSH host is not hardcoded:** zone identifiers change by region and Clever Cloud adds new zones. The authoritative source is always the CC Console Information tab.
@@ -62,19 +62,26 @@ This catches the class of prod outages where `_journal.json` entries are silentl
 
 ---
 
-## Step 5 — CI auth (non-interactive)
+## Step 5 — (Alternative) CLI deploys in CI instead of SSH
 
-For CI environments where `clever` CLI is used instead of SSH:
+The default pipeline (Steps 2-3) deploys via SSH push and needs only the `CLEVER_SSH_KEY` secret. If you prefer the `clever` CLI in CI instead:
+
 ```yaml
 env:
   CLEVER_TOKEN: ${{ secrets.CLEVER_TOKEN }}
   CLEVER_SECRET: ${{ secrets.CLEVER_SECRET }}
+
+steps:
+  - run: npm install -g clever-tools
+  - run: clever deploy -f --app $APP_TEST_ID
 ```
-Get token + secret from: CC Console → Profile → OAuth tokens.
+Get token + secret from: CC Console → Profile → OAuth tokens. Both are required — `CLEVER_TOKEN` alone does not authenticate.
 
 ---
 
 ## Step 6 — Document apps in CLAUDE.md
+
+Use `templates/CLAUDE.md.template` from this repo — it covers the apps table, branch convention, migrations (`CC_PRE_RUN_HOOK`), health check, and runtime-vs-build env var classes. Minimal inline version:
 
 ```markdown
 ## Clever Cloud apps

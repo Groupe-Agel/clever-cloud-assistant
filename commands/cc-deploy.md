@@ -11,7 +11,7 @@ Deploy a Clever Cloud application with pre-flight checks and automatic health ve
 ## Prerequisites
 
 - Project `CLAUDE.md` must contain a "Clever Cloud apps" table with app IDs, zones, and URLs
-- Either: `clever` CLI installed + `CLEVER_TOKEN` set — OR — SSH deploy key loaded (`ssh-add`)
+- Either: `clever` CLI installed + authenticated (`clever login`, or `CLEVER_TOKEN`+`CLEVER_SECRET` in CI) — OR — SSH deploy key loaded (`ssh-add`)
 
 ## Flow
 
@@ -33,20 +33,21 @@ Run all checks; warn but do not block on advisory issues:
 ### Step 3 — Choose deploy method
 
 Detect which method is available:
-- `clever` CLI installed AND `CLEVER_TOKEN` set → **Method A (CLI)**
+- `clever` CLI installed AND `clever profile` exits 0 (covers both `clever login` config and `CLEVER_TOKEN`/`CLEVER_SECRET` env auth) → **Method A (CLI)**
 - Otherwise → **Method B (SSH)**
 
 **Method A — clever CLI:**
 ```bash
 clever deploy -f
 ```
+Note: redeploying an unchanged commit fails by default (`--same-commit-policy` defaults to `error`). For a redeploy without code changes use `clever deploy -f --same-commit-policy rebuild` (or `restart` to reuse the build).
 
 **Method B — SSH git push:**
 ```bash
 GIT_SSH_COMMAND='ssh -i ~/.ssh/clever_deploy_key -o IdentitiesOnly=yes' \
-  git push git+ssh://git@push.<zone>.clever-cloud.com/<APP_ID>.git HEAD:master --force
+  git push git+ssh://git@<push-host-from-CLAUDE.md>/<APP_ID>.git HEAD:master --force
 ```
-(Zone and APP_ID read from CLAUDE.md)
+(Push host — e.g. `push-n3-par-clevercloud-customers.services.clever-cloud.com` — and APP_ID read from CLAUDE.md)
 
 ### Step 4 — Post-deploy health check
 
@@ -61,4 +62,4 @@ Load the cc-healthcheck skill:
 
 **Health failure:**
 > Deploy pushed. Health check FAILED after 60s.
-> Next: `clever logs --app <id> --since 10m | tail -80`
+> Next: `clever logs --app <id> --since 10m --until 5s | tail -80`

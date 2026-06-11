@@ -10,7 +10,7 @@ Collected from real production incidents across 12+ apps. Each entry: symptom �
 
 **Root causes & fixes**:
 - **Two different CC SSH hosts** — do not confuse them:
-  - Git deploy: `push.<zone>.clever-cloud.com` (push code here)
+  - Git deploy: `push-<n>-<zone>-clevercloud-customers.services.clever-cloud.com` (push code here — e.g. `push-n3-par-clevercloud-customers.services.clever-cloud.com`)
   - Instance SSH: `sshgateway-clevercloud-customers.services.clever-cloud.com` (shell access here)
 - **Zone is not a marketing name** — get the exact hostname from CC Console → App → Information tab → Git deployment URL. "EU West" and "NA" are marketing names; the zone identifier in the URL (e.g. `par`, `mtl`) is what matters.
 - **Multiple SSH keys conflict** — use `GIT_SSH_COMMAND='ssh -i ~/.ssh/clever_key -o IdentitiesOnly=yes'`
@@ -94,7 +94,7 @@ To force a clean rebuild: `clever restart --without-cache`
 
 **Root cause**: The CC docs warn explicitly: `clever env import` **DELETES ALL EXISTING VARIABLES** before importing.
 
-**Fix**: Always use `clever env set KEY=VALUE` for individual vars. Treat `env import` as a nuclear option — take a backup first (`clever env > backup.env`).
+**Fix**: Always use `clever env set KEY VALUE` (two arguments) for individual vars. Treat `env import` as a nuclear option — take a backup first (`clever env > backup.env`).
 
 ---
 

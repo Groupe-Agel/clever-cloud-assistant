@@ -38,15 +38,20 @@ Create a **dedicated migration app** in CC:
 
 1. Set `CC_TASK=true` in app env vars
 2. Set `CC_RUN_COMMAND=npm run db:migrate`
-3. App runs the command once and terminates — no persistent dyno cost
+3. App runs the command once and terminates — no persistent instance cost
 
-Deploy this task app **before** the main app in CI:
+Deploy this task app **before** the main app in CI (`clever deploy` blocks until deploy-end, so the migration completes before the next step runs):
 ```yaml
-- name: Run migrations
-  run: CLEVER_TOKEN=${{ secrets.CLEVER_TOKEN }} clever deploy -f --app $MIGRATION_APP_ID
+env:
+  CLEVER_TOKEN: ${{ secrets.CLEVER_TOKEN }}
+  CLEVER_SECRET: ${{ secrets.CLEVER_SECRET }}
 
-- name: Deploy API
-  run: CLEVER_TOKEN=${{ secrets.CLEVER_TOKEN }} clever deploy -f --app $API_APP_ID
+steps:
+  - name: Run migrations
+    run: clever deploy -f --app $MIGRATION_APP_ID
+
+  - name: Deploy API
+    run: clever deploy -f --app $API_APP_ID
 ```
 
 Ideal for: multi-step migrations, long-running migrations, strict migration control.
@@ -90,8 +95,9 @@ Add `migrations-check.yml` to CI (template in this repo) to catch regressions be
 ## Manual migration (emergency)
 
 ```bash
-# Export CC DB connection string
-clever env | grep DATABASE_URL
+# Export CC DB connection string — CC Postgres add-ons inject
+# POSTGRESQL_ADDON_URI by default; DATABASE_URL exists only if aliased
+clever env | grep -E "(DATABASE_URL|POSTGRESQL_ADDON_URI)"
 
 # Run locally against CC DB
 DATABASE_URL="postgresql://..." npm run db:migrate

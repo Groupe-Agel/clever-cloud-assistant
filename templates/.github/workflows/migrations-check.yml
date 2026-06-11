@@ -1,4 +1,3 @@
-```yaml
 # Migration Journal Integrity Check
 #
 # Validates that Drizzle (or any jq-parseable) migration journal stays consistent.
@@ -53,6 +52,14 @@ jobs:
             exit 1
           fi
 
+          # Fail loudly on malformed JSON — otherwise jq dies inside the
+          # process substitution, the loop never runs, and the check
+          # passes silently.
+          if ! jq empty "$JOURNAL" 2>/dev/null; then
+            echo "ERROR: $JOURNAL is not valid JSON."
+            exit 1
+          fi
+
           missing=0
           while IFS= read -r tag; do
             sql_file="$JOURNAL_DIR/$tag.sql"
@@ -101,36 +108,39 @@ jobs:
           echo "OK: All numbered SQL files are recorded in the journal."
 
       # ---------------------------------------------------------------
-      # CHECK 3: Journal must not regress vs the base branch.
+      # CHECK 3: Journal must not regress vs the pre-change state.
       # Catches: squashed or rebased branches that silently drop
-      # migration entries that already exist on origin/main or
-      # origin/test, which would corrupt deployed databases.
+      # migration entries that already exist on the base, which would
+      # corrupt deployed databases.
+      #
+      # PRs compare against the target branch; direct pushes compare
+      # against the pre-push tip (github.event.before) — comparing
+      # against origin/<branch> after a push is a no-op because the
+      # remote ref already points at the pushed commit.
       # ---------------------------------------------------------------
-      - name: Check journal does not regress vs base branch
+      - name: Check journal does not regress vs base
         run: |
           JOURNAL="$JOURNAL_DIR/meta/_journal.json"
 
-          # Determine which base branch to compare against.
-          # For PRs use the target branch; for direct pushes use the
-          # branch being pushed to (main or test).
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             BASE_BRANCH="${{ github.base_ref }}"
+            git fetch origin "$BASE_BRANCH" --depth=1 2>/dev/null || true
+            BASE_REF="origin/$BASE_BRANCH"
           else
-            BASE_BRANCH="${GITHUB_REF#refs/heads/}"
+            # Direct push: the pre-push tip of this branch
+            BASE_REF="${{ github.event.before }}"
+            if [ "$BASE_REF" = "0000000000000000000000000000000000000000" ]; then
+              echo "INFO: New branch push — no pre-push state to compare. Skipping."
+              exit 0
+            fi
           fi
 
-          # Resolve the remote tracking ref (origin/main or origin/test)
-          REMOTE_REF="origin/$BASE_BRANCH"
-
-          # Fetch if the ref is not yet available locally
-          git fetch origin "$BASE_BRANCH" --depth=1 2>/dev/null || true
-
-          # Read tags from the base branch version of the journal (may not
+          # Read tags from the base version of the journal (may not
           # exist on brand-new repos — skip gracefully in that case)
-          BASE_JOURNAL=$(git show "$REMOTE_REF:$JOURNAL_DIR/meta/_journal.json" 2>/dev/null || echo "")
+          BASE_JOURNAL=$(git show "$BASE_REF:$JOURNAL_DIR/meta/_journal.json" 2>/dev/null || echo "")
 
           if [ -z "$BASE_JOURNAL" ]; then
-            echo "INFO: No journal found on $REMOTE_REF — skipping regression check."
+            echo "INFO: No journal found at $BASE_REF — skipping regression check."
             exit 0
           fi
 
@@ -138,16 +148,15 @@ jobs:
           while IFS= read -r tag; do
             match=$(jq -r --arg tag "$tag" '.entries[] | select(.tag == $tag) | .tag' "$JOURNAL")
             if [ -z "$match" ]; then
-              echo "REGRESSION: tag '$tag' exists on $REMOTE_REF but is missing from the current branch."
+              echo "REGRESSION: tag '$tag' exists at $BASE_REF but is missing from the current branch."
               regressed=$((regressed + 1))
             fi
           done < <(echo "$BASE_JOURNAL" | jq -r '.entries[].tag')
 
           if [ "$regressed" -gt 0 ]; then
-            echo "ERROR: $regressed migration tag(s) were removed compared to $REMOTE_REF."
+            echo "ERROR: $regressed migration tag(s) were removed compared to $BASE_REF."
             echo "Removing applied migrations from the journal breaks deployed databases."
             exit 1
           fi
 
-          echo "OK: Journal does not regress vs $REMOTE_REF."
-```
+          echo "OK: Journal does not regress vs $BASE_REF."
