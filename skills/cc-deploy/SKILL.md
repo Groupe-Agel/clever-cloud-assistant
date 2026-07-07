@@ -78,12 +78,19 @@ Clever Cloud rewrites the remote history on every deployment. Your push will alw
 
 ---
 
-## Post-deploy
+## Post-deploy — three mandatory gates
 
-Always invoke the cc-healthcheck skill after every deploy.
+A deploy is not "done" until all three pass. "Green build ≠ works end-to-end" is the most re-learned lesson across our production incidents (shipped-but-not-wired features, contract-path mismatches, silent migration no-ops) — these gates exist so it is never re-learned again.
 
-- If `CC_HEALTH_CHECK_PATH` is configured in the app's env vars: CC handles health validation natively — a passing deploy already guarantees app health.
+**Gate 1 — health.** Invoke the cc-healthcheck skill.
+- If `CC_HEALTH_CHECK_PATH` is configured in the app's env vars: CC validates natively — a passing deploy already guarantees app health.
 - If not configured: use the external polling loop in cc-healthcheck.
+
+**Gate 2 — migrations actually applied** (only when the deploy included migrations). Drizzle prints `[✓] migrations applied successfully!` even when it applied nothing. Run the verification from cc-migrations ("success message lies" section): count `drizzle.__drizzle_migrations` rows vs journal entries, and spot-check one artifact the migration was supposed to create.
+
+**Gate 3 — contract smoke.** Exercise ONE real end-to-end path through the feature that shipped (curl the new endpoint with real auth, load the page, fire the widget message) — not just `/health`. If the change has a UI, drive it; if it has an API contract, call it. Report the actual observed response, not the deploy status.
+
+Never report a deploy as successful to the user before all applicable gates have run. If a gate cannot run (e.g. no prod credentials), say so explicitly instead of skipping silently.
 
 ---
 

@@ -98,7 +98,32 @@ if [ -n "$JOURNAL_FILES" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Check 3 — Auth
+# Check 3 — main/master divergence
+# Counter-move from ~/brain/telos/90-patterns.md: this bit CFAConnect and
+# EduChatbot (hours lost chasing wrong-branch hypotheses). Warn when both
+# branches exist and have diverged, or when the push refspec source is not
+# the branch currently checked out.
+# ---------------------------------------------------------------------------
+if [ -n "$REPO_ROOT" ]; then
+    CUR_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+    if git show-ref --verify --quiet refs/heads/main && git show-ref --verify --quiet refs/heads/master; then
+        COUNTS=$(git rev-list --left-right --count main...master 2>/dev/null)
+        AHEAD=$(printf '%s' "$COUNTS" | awk '{print $1}')
+        BEHIND=$(printf '%s' "$COUNTS" | awk '{print $2}')
+        if [ "${AHEAD:-0}" != "0" ] || [ "${BEHIND:-0}" != "0" ]; then
+            printf '⚠️  cc-pre-deploy: main and master BOTH exist and have DIVERGED (main +%s / master +%s). Verify you are deploying the branch you think you are (current: %s).\n' "${AHEAD:-?}" "${BEHIND:-?}" "${CUR_BRANCH:-detached}" >&2
+        fi
+    fi
+    if printf '%s' "$COMMAND" | grep -q "git push"; then
+        SRC=$(printf '%s' "$COMMAND" | grep -oE '[A-Za-z0-9_./-]+:master' | head -1 | cut -d: -f1)
+        if [ -n "$SRC" ] && [ -n "$CUR_BRANCH" ] && [ "$SRC" != "$CUR_BRANCH" ] && [ "$SRC" != "HEAD" ]; then
+            printf '⚠️  cc-pre-deploy: Pushing branch %s to remote master while checked out on %s. Confirm this is intentional.\n' "$SRC" "$CUR_BRANCH" >&2
+        fi
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# Check 4 — Auth
 # ---------------------------------------------------------------------------
 if printf '%s' "$COMMAND" | grep -q "clever deploy"; then
     # Clever Cloud CLI method: authenticated via `clever login` config file

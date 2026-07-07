@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Pre-deploy hook: main/master divergence check** — warns when both `main` and `master` exist and have diverged (ahead/behind counts shown), and when the push refspec source branch is not the branch currently checked out. Encodes the counter-move from two real incidents (CFAConnect, EduChatbot) where wrong-branch hypotheses cost hours.
+- **cc-deploy: post-deploy is now three mandatory gates** — (1) healthcheck, (2) migrations-actually-applied verification (the Drizzle "success message lies" checks from cc-migrations), (3) contract smoke through one real end-to-end path of the shipped feature. A deploy must not be reported successful before all applicable gates run; skipped gates must be declared, never silent.
 - Initial project setup for clever-cloud-assistant.
 - `install.ps1` (Windows) and `install.sh` (Unix) installers — copy components into `~/.claude/` and optionally register the pre-deploy hook in `settings.json` (with backup, idempotent).
 - **7 new gotchas (11-17) sourced from real production incidents**: Monitoring/Unreachable killswitch, TypeScript build stall on small instances (+ cancel/restart cache-preservation recovery), `clever deploy` 401 on GitHub-integrated apps, Postgres add-on ~5-connection cap vs pg.Pool defaults, Drizzle out-of-sync tracking table silent rollback, Drizzle migration authoring rules (transaction/splitter/comment-blind traps), main/master divergence.
